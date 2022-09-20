@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import random
-from discord.ext.commands import command, has_permissions, bot_has_permissions, Bot, NotOwner, CommandNotFound
+from discord.ext.commands import command, has_permissions, bot_has_permissions, Bot, NotOwner, CommandNotFound, Cog
 from asyncio import sleep
 
 CONFIG_PATH = "config.json"
@@ -17,15 +17,17 @@ default_config = {
         "from_field": 1,
 }
 
-class ModmailBot(object):
+class ModmailBot(Cog):
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
         self.last_user = None
 
+    @Cog.listener()
     async def on_ready(self):
         print(f"Signed in as {self.bot.user} ({self.bot.user.id})")
 
+    @Cog.listener()
     async def on_message(self, message):
         in_dms = isinstance(message.channel, discord.DMChannel)
         is_mentioned = self.bot.user.id in map(lambda u: u.id, message.mentions)
@@ -55,10 +57,11 @@ class ModmailBot(object):
             await message.add_reaction('📬')
         self.last_user = message.author
 
+    @Cog.listener()
     async def on_command_error(self, ctx, err):
         if isinstance(err, CommandNotFound):
             return
-
+    
     async def _shutdown(self):
         await self.bot.logout()
         await self.bot.close()
@@ -133,7 +136,18 @@ if not os.path.exists(CONFIG_PATH):
     print("No config detected; a new one has been written! Please edit config.json then run the bot again.")
     sys.exit(1)
 
+class MyBot(Bot):
+    def __init__(self, config):
+        super().__init__(config["prefix"], description="A modmail bot.", intents=discord.Intents.all())
+        self.config = config
+
+    async def startup(self):
+        await bot.wait_until_ready()
+        await bot.add_cog(ModmailBot(self, self.config))
+
+    async def setup_hook(self):
+        self.loop.create_task(self.startup())
+
 config = read_config()
-bot = Bot(config["prefix"], description="A modmail bot.")
-bot.add_cog(ModmailBot(bot, config))
+bot = MyBot(config)
 bot.run(config["token"])
